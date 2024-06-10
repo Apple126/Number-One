@@ -40,14 +40,6 @@ while need_query:
         need_query = False
         break
 
-    # sql_query = input('''Введите SQL-запрос, например:
-    # SELECT rooms.name, AVG(date_part('year', age(birthday))) as age
-    # FROM rooms
-    # LEFT JOIN students on rooms.id = students.room
-    # GROUP BY rooms.name
-    # ORDER BY age
-    # LIMIT 5:
-    #  ''')
 
     print('''Введите SQL-запрос. Введите пустую строку для завершения ввода:
     
@@ -63,10 +55,21 @@ while need_query:
             break
         sql_query += line + ' '
 
-    file_format = input('Введите формат файла для сохранения [json \ xlm \ csv]: ')
+    file_format = input('Введите формат файла для сохранения [json / xml / csv]: ').strip().lower()
+    file_name = input('Введите наименование файла: ')
+
+    output_path = f'C:\\Users\\User\\Desktop\\BigData\\Results\\{file_name}.{file_format}'
 
     # Выполнение SQL-запроса и сохранение результатов в DataFrame
     df_sql_query = pd.read_sql_query(sql_query, engine)
 
-    # Сохранение DataFrame в JSON
-    df_sql_query.to_json(r'C:\Users\User\Desktop\BigData\Results\rooms.json', orient='records')
+    # Сохранение DataFrame в папку
+
+    if file_format == 'json':
+        df_sql_query.to_json(output_path, orient='records')
+    elif file_format == 'xml':
+        df_sql_query.to_xml(output_path)
+    elif file_format == 'csv':
+        df_sql_query.to_csv(output_path, index=True)
+
+    print(f'Результат запроса в файле {file_name}.{file_format} сохранен по пути: {output_path}')
