@@ -1,15 +1,43 @@
+import os
+
 import pandas as pd
 import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy import text
 
-students_df = pd.read_json(r'C:\Users\User\Desktop\BigData\students.json')
-rooms_df = pd.read_json(r'C:\Users\User\Desktop\BigData\rooms.json')
+# students_df = pd.read_json(r'C:\Users\User\Desktop\BigData\students.json')
+# rooms_df = pd.read_json(r'C:\Users\User\Desktop\BigData\rooms.json')
 
-print(students_df)
-print(rooms_df)
+db_params = {
+    'user': 'postgres',
+    'password': '12345',
+    'host': 'localhost',
+    'port': 5432,
+    'database': 'Task'
+}
 
-engine = create_engine('postgresql://postgres:12345@localhost:5432/Task') # подключение к PostgreSQL
+engine = create_engine(f'postgresql://{db_params['user']}:{db_params['password']}@{db_params['host']}:{db_params['port']}/{db_params['database']}') # подключение к Postgre SQL
+
+json_directory = r'C:\Users\User\Desktop\BigData'
+
+# определяем json файлы в указанной папке
+json_files = []
+for i in os.listdir(json_directory):
+    if i.endswith('.json'):
+        json_files.append(i)
+print(f'Выбранные для загрузки в базу файлы: {json_files}')
+
+need_to_upload = input(f'Начать загрузку указанных файлов в базу {db_params['database']}? +/-')
+if need_to_upload == '+':
+    for file in json_files:
+        file_path = os.path.join(json_directory, file)
+        table_name = file.split('.')[0]
+        df = pd.read_json(file_path)
+        df.to_sql(name=f'{table_name}', con=f'{engine}', if_exists='replace', index=False)
+        print(f'Загрузка файла {file} в таблицу {table_name}')
+
+    else:
+        print('Загрузка отменена')
 
 # students_df.to_sql(name='students', con=engine, if_exists='replace', index=False,
 #     dtype={
@@ -26,27 +54,16 @@ engine = create_engine('postgresql://postgres:12345@localhost:5432/Task') # по
 #         'name': sqlalchemy.types.VARCHAR(length=55),
 #     })
 
-# with engine.connect() as connection:
-#     result = connection.execute(text('SELECT * FROM students LIMIT 5;'))
-#     for row in result:
-#         print(row)
-
 need_query = True
 
 while need_query:
-    do_i_need = input('Желаете написать SQL-запрос? [+ или -]: ')
+    do_i_need_query = input('Желаете написать SQL-запрос? [+ или -]: ')
 
-    if do_i_need == '-':
+    if do_i_need_query == '-':
         need_query = False
         break
 
-
-    print('''Введите SQL-запрос. Введите пустую строку для завершения ввода:
-    
-    SELECT *
-    FROM rooms
-    LEFT JOIN students on rooms.id = students.room
-     ''')
+    print('Введите SQL-запрос. Введите пустую строку для завершения ввода: ')
 
     sql_query = ''
     while True:
@@ -58,7 +75,7 @@ while need_query:
     file_format = input('Введите формат файла для сохранения [json / xml / csv]: ').strip().lower()
     file_name = input('Введите наименование файла: ')
 
-    output_path = f'C:\\Users\\User\\Desktop\\BigData\\Results\\{file_name}.{file_format}'
+    output_path = fr'C:\Users\User\Desktop\BigData\Results\{file_name}.{file_format}'
 
     # Выполнение SQL-запроса и сохранение результатов в DataFrame
     df_sql_query = pd.read_sql_query(sql_query, engine)
