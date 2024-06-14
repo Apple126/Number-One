@@ -1,17 +1,20 @@
-# Используем официальный образ Python в качестве базового
+# Используем базовый образ Python
 FROM python:3.10-slim
 
 # Установим зависимости для работы с PostgreSQL
 RUN apt-get update && apt-get install -y libpq-dev
 
-# Установим рабочую директорию внутри контейнера
+# Установим рабочую директорию
 WORKDIR /app
 
-# Скопируем файлы проекта в рабочую директорию
-COPY . .
+# Скопируем requirements.txt в контейнер
+COPY requirements.txt .
 
-# Установим зависимости Python из файла requirements.txt
+# Установим зависимости из requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Скопируем все файлы вашего проекта в контейнер
+COPY . .
+
 # Определим команду для запуска скрипта
-CMD ["python", "Task_1.py"]
+CMD ["python", "SQL connect.py"]
