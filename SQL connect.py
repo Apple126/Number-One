@@ -2,7 +2,20 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
+import logging
 
+# Настройка логгирования
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+logger.info('Загрузка переменных окружения')
 load_dotenv()
 
 db_params = {
@@ -13,49 +26,74 @@ db_params = {
     'database': os.getenv('DB_NAME'),
 }
 
-engine = create_engine(f'postgresql://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["database"]}') # подключение к Postgre SQL
+# Функция для проверки подключения
+try:
+    engine = create_engine(f'postgresql://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["database"]}')
+    # Попытка установить фактическое соединение
+    engine.connect()
+    logger.info('Успешное подключение к базе данных')
+except Exception as e:
+    logger.error(f'Ошибка при подключении к базе данных: {e}')
+    raise  # После записи логов возбуждаем исключение снова
 
-# Путь к директории с JSON файлами внутри контейнера
-json_directory = r'/app/BigData'
+json_directory = r'/home/user/Desktop/BigData'
+logger.info(f'Указанная директория для JSON файлов: {json_directory}')
 
 # определяем json файлы в указанной папке
 json_files = []
 for i in os.listdir(json_directory):
     if i.endswith('.json'):
         json_files.append(i)
-print(f'Выбранные для загрузки в базу файлы: {json_files}')
+logger.info(f'Выбранные для загрузки в базу файлы: {json_files}')
 
-# Чтение параметров загрузки из переменных окружения
-need_to_upload = os.getenv('UPLOAD_FILES', '+')
+need_to_upload = input(f'Требуется ли загрузка указанных файлов в базу {db_params["database"]}? [+ или -]: ')
 if need_to_upload == '+':
     for file in json_files:
         file_path = os.path.join(json_directory, file)
         table_name = file.split('.')[0]
         df = pd.read_json(file_path)
         df.to_sql(name=table_name, con=engine, if_exists='replace', index=False)
-        print(f'Загрузка данных из {file} в таблицу {table_name}')
+        logger.info(f'Загрузка данных из {file} в таблицу {table_name}')
 else:
-    print('Загрузка отменена')
+    logger.info('Загрузка отменена')
 
-# Чтение SQL-запроса и параметров сохранения из переменных окружения
-sql_query = os.getenv('SQL_QUERY')
-if sql_query:
-    file_format = os.getenv('FILE_FORMAT', 'json').strip().lower()
-    file_name = os.getenv('FILE_NAME', 'output')
+# Написание SQL запроса к базе
+need_query = True
+while need_query:
+    do_i_need_query = input('Желаете написать SQL-запрос? [+ или -]: ')
+    if do_i_need_query == '-':
+        need_query = False
+        break
 
-    output_path = fr'/app/BigData/Results/{file_name}.{file_format}'
+    logger.info('Начало ввода SQL-запроса')
+    print('Введите SQL-запрос. Для завершения ввода - введите пустую строку : ')
+    # Ввод самого запроса (с возможностью писать в удобном формате, как в SQL, на новых строчках)
+    sql_query = ''
+    while True:
+        line = input()
+        if line == '':
+            break
+        sql_query += line + ' '
 
-    # Выполнение SQL-запроса и сохранение результатов в DataFrame
-    df_result = pd.read_sql_query(sql_query, engine)
+    file_format = input('Введите формат файла для сохранения [json / xml / csv]: ').strip().lower()
+    file_name = input('Введите наименование файла: ')
 
-    # Сохранение результата в папку, с выбранным форматом
-    if file_format == 'json':
-        df_result.to_json(output_path, orient='records')
-    elif file_format == 'xml':
-        df_result.to_xml(output_path)
-    elif file_format == 'csv':
-        df_result.to_csv(output_path, index=True)
+    output_path = fr'/home/user/Desktop/BigData/Results/{file_name}.{file_format}'
 
-    print(f'Результат запроса в файле {file_name}.{file_format} сохранен по пути: {output_path}')
-else:
-    print('SQL-запрос не был указан')
+    try:
+        # Выполнение SQL-запроса и сохранение результатов в DataFrame
+        df_result = pd.read_sql_query(sql_query, engine)
+
+        # Сохранение результата в папку, с выбранным форматом
+        if file_format == 'json':
+            df_result.to_json(output_path, orient='records')
+        elif file_format == 'xml':
+            df_result.to_xml(output_path)
+        elif file_format == 'csv':
+            df_result.to_csv(output_path, index=True)
+
+        logger.info(f'Результат запроса в файле {file_name}.{file_format} сохранен по пути: {output_path}')
+    except Exception as e:
+        logger.error(f'Ошибка при выполнении SQL-запроса или сохранении файла: {e}')
+
+logger.info('Скрипт завершен')
