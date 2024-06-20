@@ -19,63 +19,59 @@ logger = logging.getLogger(__name__)
 def connection_to_database(db_params):
     try:
         engine = create_engine(f'postgresql://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["database"]}')
-        # Попытка установить фактическое соединение
         engine.connect()
         logger.info('Успешное подключение к базе данных')
         return engine
     except Exception as e:
         logger.error(f'Ошибка при подключении к базе данных: {e}')
-        raise  # После записи логов возбуждаем исключение снова
+        raise
 
 # определяем json файлы в указанной папке
-def load_json_files(directory):
-    logger.info(f'Указанная директория для JSON файлов: {directory}')
-    json_files = []
-    for i in os.listdir(directory):
+def load_json_files(source_directory):
+    logger.info(f'Указанная директория для JSON файлов: {source_directory}')
+    files = []
+    for i in os.listdir(source_directory):
         if i.endswith('.json'):
-            json_files.append(i)
-    logger.info(f'Выбранные для загрузки в базу файлы: {json_files}')
-    return json_files
+            files.append(i)
+    logger.info(f'Выбранные для загрузки в базу файлы: {files}')
+    return files
 
-def upload_json_files(files, directory, db_params, engine):
-    need_to_upload = input(f'Требуется ли загрузка указанных файлов в базу {db_params["database"]}? [+ или -]: ')
-    if need_to_upload == '+':
-        for file in files:
-            file_path = os.path.join(directory, file)
-            table_name = file.split('.')[0]
-            df = pd.read_json(file_path)
+def upload_json_files(json_files, results_directory, db_params, engine):
+    upload_confirmation = input(f'Требуется ли загрузка указанных файлов в базу {db_params["database"]}? [+ или -]: ')
+    if upload_confirmation == '+':
+        for file in json_files:
+            file_path = os.path.join(results_directory, file) # путь для выгрузки результата SQL запроса файлом
+            table_name = file.split('.')[0] # название таблицы SQL = название файла json
+            df = pd.read_json(f'{file_path}')
             df.to_sql(name=table_name, con=engine, if_exists='replace', index=False)
             logger.info(f'Загрузка данных из {file} в таблицу {table_name}')
     else:
         logger.info('Загрузка отменена')
 
-# Написание SQL запроса к базе
-def sql_query(engine):
-    need_query = True
-    while need_query:
+def sql_query(engine, output_directory):      # написание SQL запроса к базе
+    while True:
         do_i_need_query = input('Желаете написать SQL-запрос? [+ или -]: ')
         if do_i_need_query == '-':
-            need_query = False
             break
 
         logger.info('Начало ввода SQL-запроса')
         print('Введите SQL-запрос. Для завершения ввода - введите пустую строку : ')
-        # Ввод самого запроса (с возможностью писать в удобном формате, как в SQL, на новых строчках)
-        sql_query = ''
+
+        query = ''  # собираем SQL запрос по строкам, вводим в консоль
         while True:
             line = input()
             if line == '':
                 break
-            sql_query += line + ' '
+            query += line + ' '
 
         file_format = input('Введите формат файла для сохранения [json / xml / csv]: ').strip().lower()
         file_name = input('Введите наименование файла: ')
 
-        output_path = fr'/home/user/Desktop/BigData/Results/{file_name}.{file_format}'
+        output_path = fr'{output_directory}/{file_name}.{file_format}' #путь для выгрузки результатов
 
         try:
             # Выполнение SQL-запроса и сохранение результатов в DataFrame
-            df_result = pd.read_sql_query(sql_query, engine)
+            df_result = pd.read_sql_query(query, engine)
 
             # Сохранение результата в папку, с выбранным форматом
             if file_format == 'json':
@@ -84,14 +80,13 @@ def sql_query(engine):
                 df_result.to_xml(output_path)
             elif file_format == 'csv':
                 df_result.to_csv(output_path, index=True)
-
-            logger.info(f'Результат запроса в файле {file_name}.{file_format} сохранен по пути: {output_path}')
+            logger.info(f'Результат запроса в {file_name}.{file_format} сохранен по пути: {output_path}')
         except Exception as e:
             logger.error(f'Ошибка при выполнении SQL-запроса или сохранении файла: {e}')
 
 def main():
     try:
-        logger.info('Загрузка переменных окружения')
+        logger.info('Загрузка переменных для подключения к базе данных')
         load_dotenv()
 
         db_params = {
@@ -102,11 +97,13 @@ def main():
             'database': os.getenv('DB_NAME'),
         }
 
-        engine = connection_to_database(db_params)
-        json_directory = r'/home/user/Desktop/BigData'
-        json_files = load_json_files(json_directory)
-        upload_json_files(json_files, json_directory, db_params, engine)
-        sql_query(engine)
+        source_directory = r'/home/user/Desktop/BigData' # директория загрузки с json файлами
+        output_directory = r'/home/user/Desktop/BigData/Results' # директория выгрузки результатов SQL-запроса
+
+        engine = connection_to_database(db_params) # подключение к базе данных
+        json_files_list = load_json_files(source_directory) # получаем список файлов json
+        upload_json_files(json_files_list, source_directory, db_params, engine)
+        sql_query(engine, output_directory)
     except Exception as e:
         logger.info(f'Ошибка во время выполнения скрипта: {e}')
     finally:
